@@ -25,22 +25,22 @@ public class UserController {
 
     @PostMapping
     public User create(@RequestBody User user) {
-        if(user.getEmail() == null || user.getEmail().isBlank() || !user.getEmail().contains("@")) {
+        if (user.getEmail() == null || user.getEmail().isBlank() || !user.getEmail().contains("@")) {
             log.warn("Валидация не пройдена при создании пользователя: эмейл должен быть указан и содержать @");
             throw new ConditionNotMetException("Эмейл должен быть указан и содержать @");
         }
-        if(user.getLogin() == null || user.getLogin().isBlank() || user.getLogin().contains(" ")) {
+        if (user.getLogin() == null || user.getLogin().isBlank() || user.getLogin().contains(" ")) {
             log.warn("Валидация не пройдена при создании пользователя: логин не может быть пустым или содержать пробелы");
             throw new ConditionNotMetException("Логин не может быть пустым или содержать пробелы");
         }
-        if(user.getName() == null || user.getName().isBlank()) {
+        if (user.getName() == null || user.getName().isBlank()) {
             user.setName(user.getLogin());
         }
-        if(user.getBirthday() == null) {
+        if (user.getBirthday() == null) {
             log.warn("Валидация не пройдена при создании пользователя: дата рождения должна быть указана");
             throw new ConditionNotMetException("Дата рождения должна быть указана");
         }
-        if(user.getBirthday().isAfter(LocalDate.now())) {
+        if (user.getBirthday().isAfter(LocalDate.now())) {
             log.warn("Валидация не пройдена при создании пользователя: дата рождения не может быть в будущем");
             throw new ConditionNotMetException("Дата рождения не может быть в будущем");
         }
@@ -52,7 +52,7 @@ public class UserController {
 
     @PutMapping
     public User update(@RequestBody User newUser) {
-        if(newUser.getId() == null) {
+        if (newUser.getId() == null) {
             log.warn("Валидация не пройдена при обновлении пользователя: ID не может быть пустым");
             throw new ConditionNotMetException("ID не может быть пустым");
         }
