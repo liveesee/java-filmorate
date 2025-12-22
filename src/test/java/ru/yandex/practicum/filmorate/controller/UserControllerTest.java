@@ -19,7 +19,7 @@ class UserControllerTest {
     }
 
     @Test
-    void shouldSucceedWithValidData() {
+    void shouldSucceedWithValidData(){
         User user = new User();
         user.setEmail("test@example.com");
         user.setLogin("testlogin");
