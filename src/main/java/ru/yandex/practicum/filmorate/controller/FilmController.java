@@ -20,12 +20,12 @@ public class FilmController {
 
 
     @GetMapping
-    public Collection<Film> findAll(){
+    public Collection<Film> findAll() {
         return films.values();
     }
 
     @PostMapping
-    public Film create(@RequestBody Film film){
+    public Film create(@RequestBody Film film) {
         if(film.getName() == null || film.getName().isBlank()) {
             log.warn("Валидация не пройдена при создании фильма: название должно быть указано");
             throw new ConditionNotMetException("Название должно быть указано");
@@ -58,7 +58,7 @@ public class FilmController {
     }
 
     @PutMapping
-    public Film update(@RequestBody Film newFilm){
+    public Film update(@RequestBody Film newFilm) {
         if(newFilm.getId() == null) {
             log.warn("Валидация не пройдена при обновлении фильма: ID должен быть указан");
             throw new ConditionNotMetException("ID должен быть указан");
