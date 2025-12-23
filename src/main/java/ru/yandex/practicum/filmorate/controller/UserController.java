@@ -61,16 +61,32 @@ public class UserController {
             throw new NotFoundException("Пользователь с ID " + newUser.getId() + " не найден");
         }
         User existingUser = users.get(newUser.getId());
+        if (newUser.getEmail() != null) {
+            if (newUser.getEmail().isBlank() || !newUser.getEmail().contains("@")) {
+                log.warn("Валидация не пройдена при обновлении пользователя: эмейл должен быть указан и содержать @");
+                throw new ConditionNotMetException("Эмейл должен быть указан и содержать @");
+            }
+            existingUser.setEmail(newUser.getEmail());
+        }
         if (newUser.getLogin() != null) {
+            if (newUser.getLogin().isBlank() || newUser.getLogin().contains(" ")) {
+                log.warn("Валидация не пройдена при обновлении пользователя: логин не может быть пустым или содержать пробелы");
+                throw new ConditionNotMetException("Логин не может быть пустым или содержать пробелы");
+            }
             existingUser.setLogin(newUser.getLogin());
         }
         if (newUser.getName() != null) {
-            existingUser.setName(newUser.getName());
-        }
-        if (newUser.getEmail() != null) {
-            existingUser.setEmail(newUser.getEmail());
+            if (newUser.getName().isBlank()) {
+                existingUser.setName(existingUser.getLogin());
+            } else {
+                existingUser.setName(newUser.getName());
+            }
         }
         if (newUser.getBirthday() != null) {
+            if (newUser.getBirthday().isAfter(LocalDate.now())) {
+                log.warn("Валидация не пройдена при обновлении пользователя: дата рождения не может быть в будущем");
+                throw new ConditionNotMetException("Дата рождения не может быть в будущем");
+            }
             existingUser.setBirthday(newUser.getBirthday());
         }
         log.info("Пользователь успешно обновлен: ID={}, login={}, email={}", existingUser.getId(), existingUser.getLogin(), existingUser.getEmail());
