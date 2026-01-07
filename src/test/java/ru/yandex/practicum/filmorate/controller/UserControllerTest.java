@@ -4,10 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import ru.yandex.practicum.filmorate.exception.ConditionNotMetException;
 import ru.yandex.practicum.filmorate.model.User;
-import ru.yandex.practicum.filmorate.service.FilmService;
 import ru.yandex.practicum.filmorate.service.UserService;
-import ru.yandex.practicum.filmorate.storage.InMemoryFilmStorage;
 import ru.yandex.practicum.filmorate.storage.InMemoryUserStorage;
+import ru.yandex.practicum.filmorate.storage.UserStorage;
 
 import java.time.LocalDate;
 
@@ -19,7 +18,7 @@ class UserControllerTest {
 
     @BeforeEach
     void setUp() {
-        InMemoryUserStorage userStorage = new InMemoryUserStorage();
+        UserStorage userStorage = new InMemoryUserStorage();
         UserService userService = new UserService(userStorage);
         userController = new UserController(userService);
     }

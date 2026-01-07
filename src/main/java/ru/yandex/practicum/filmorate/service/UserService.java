@@ -100,9 +100,6 @@ public class UserService {
     public void deleteFriend(Integer userId, Integer friendId) {
         User user = userStorage.findById(userId);
         User friend = userStorage.findById(friendId);
-        //if(!user.getFriends().contains(friendId)) {
-        //    throw new ConditionNotMetException(user.getName() + " не друзья с " + friend.getName());
-        //}
         user.getFriends().remove(friendId);
         friend.getFriends().remove(userId);
         userStorage.update(user);
