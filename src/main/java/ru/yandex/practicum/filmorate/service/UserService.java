@@ -4,12 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionNotMetException;
-import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -53,10 +53,6 @@ public class UserService {
             log.warn("Валидация не пройдена при обновлении пользователя: ID не может быть пустым");
             throw new ConditionNotMetException("ID не может быть пустым");
         }
-        if (userStorage.findById(newUser.getId()) == null) {
-            log.warn("Ошибка при обновлении пользователя: пользователь с ID {} не найден", newUser.getId());
-            throw new NotFoundException("Пользователь с ID " + newUser.getId() + " не найден");
-        }
         if (newUser.getEmail() != null) {
             if (newUser.getEmail().isBlank() || !newUser.getEmail().contains("@")) {
                 log.warn("Валидация не пройдена при обновлении пользователя: эмейл должен быть указан и содержать @");
@@ -93,8 +89,6 @@ public class UserService {
         User friend = userStorage.findById(friendId);
         user.getFriends().add(friendId);
         friend.getFriends().add(userId);
-        userStorage.update(user);
-        userStorage.update(friend);
     }
 
     public void deleteFriend(Integer userId, Integer friendId) {
@@ -102,16 +96,13 @@ public class UserService {
         User friend = userStorage.findById(friendId);
         user.getFriends().remove(friendId);
         friend.getFriends().remove(userId);
-        userStorage.update(user);
-        userStorage.update(friend);
     }
 
     public Collection<User> getCommonFriends(Integer userId, Integer otherId) {
         User user = userStorage.findById(userId);
         User other = userStorage.findById(otherId);
-        Set<Integer> commonIds = user.getFriends().stream()
-                .filter(other.getFriends()::contains)
-                .collect(Collectors.toSet());
+        Set<Integer> commonIds = new HashSet<>(user.getFriends());
+        commonIds.retainAll(other.getFriends());
         return commonIds.stream()
                 .map(userStorage::findById)
                 .collect(Collectors.toList());
@@ -121,5 +112,4 @@ public class UserService {
         User user = userStorage.findById(userId);
         return user.getFriends().stream().map(userStorage::findById).toList();
     }
-
 }
