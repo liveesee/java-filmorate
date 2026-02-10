@@ -36,4 +36,16 @@ public class FriendDbStorage implements FriendStorage {
         List<Integer> friends = jdbcTemplate.queryForList(sql, Integer.class, userId);
         return new HashSet<>(friends);
     }
+
+    @Override
+    public Set<Integer> getCommonFriendIds(Integer userId, Integer otherId) {
+        String sql = """
+                SELECT f1.friend_id
+                FROM friends AS f1
+                JOIN friends AS f2 ON f1.friend_id = f2.friend_id
+                WHERE f1.user_id = ? AND f2.user_id = ?
+                """;
+        List<Integer> common = jdbcTemplate.queryForList(sql, Integer.class, userId, otherId);
+        return new HashSet<>(common);
+    }
 }

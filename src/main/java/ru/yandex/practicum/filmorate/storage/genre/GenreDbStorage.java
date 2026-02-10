@@ -9,7 +9,10 @@ import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.mapper.GenreRowMapper;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -38,5 +41,22 @@ public class GenreDbStorage implements GenreStorage {
             throw new NotFoundException("Жанр с ID - " + id + " не найден");
         }
         return genres.get(0);
+    }
+
+    @Override
+    public void validateIds(Set<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        String placeholders = ids.stream().map(id -> "?").collect(Collectors.joining(", "));
+        String sql = "SELECT id FROM genres WHERE id IN (%s)".formatted(placeholders);
+        List<Integer> found = jdbcTemplate.queryForList(sql, Integer.class, ids.toArray());
+        Set<Integer> missing = new HashSet<>(ids);
+        missing.removeAll(found);
+        if (!missing.isEmpty()) {
+            Integer missingId = missing.iterator().next();
+            log.warn("Жанр с ID {} не найден", missingId);
+            throw new NotFoundException("Жанр с ID - " + missingId + " не найден");
+        }
     }
 }

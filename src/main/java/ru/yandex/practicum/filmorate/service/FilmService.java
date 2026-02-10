@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionNotMetException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.storage.filmgenre.FilmGenreStorage;
 import ru.yandex.practicum.filmorate.storage.film.FilmStorage;
 import ru.yandex.practicum.filmorate.storage.genre.GenreStorage;
@@ -15,7 +16,10 @@ import ru.yandex.practicum.filmorate.storage.user.UserStorage;
 
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,8 +52,18 @@ public class FilmService {
 
     public Collection<Film> findAll() {
         Collection<Film> films = filmStorage.findAll();
-        if (likeStorage != null || filmGenreStorage != null) {
-            films.forEach(this::fillRelations);
+        if (films.isEmpty()) {
+            return films;
+        }
+        List<Integer> filmIds = films.stream()
+                .map(Film::getId)
+                .toList();
+        Map<Integer, Set<Genre>> genresByFilmId = filmGenreStorage.getGenresByFilmIds(filmIds);
+        Map<Integer, Set<Integer>> likesByFilmId = likeStorage.getLikesByFilmIds(filmIds);
+        for (Film film : films) {
+            Integer filmId = film.getId();
+            film.setGenres(genresByFilmId.getOrDefault(filmId, new HashSet<>()));
+            film.setLikes(likesByFilmId.getOrDefault(filmId, new HashSet<>()));
         }
         return films;
     }
@@ -87,9 +101,7 @@ public class FilmService {
         validateGenres(film);
         log.info("Фильм успешно создан: ID={}, name={}", film.getId(), film.getName());
         Film created = filmStorage.create(film);
-        if (filmGenreStorage != null) {
-            filmGenreStorage.setGenres(created.getId(), created.getGenres());
-        }
+        filmGenreStorage.setGenres(created.getId(), created.getGenres());
         return created;
     }
 
@@ -129,9 +141,7 @@ public class FilmService {
         }
         validateGenres(newFilm);
         Film updatedFilm = filmStorage.update(newFilm);
-        if (filmGenreStorage != null) {
-            filmGenreStorage.setGenres(updatedFilm.getId(), updatedFilm.getGenres());
-        }
+        filmGenreStorage.setGenres(updatedFilm.getId(), updatedFilm.getGenres());
         log.info("Фильм успешно обновлен: ID={}, name={}", updatedFilm.getId(), updatedFilm.getName());
         return updatedFilm;
     }
@@ -145,60 +155,54 @@ public class FilmService {
     public void addLike(Integer filmId, Integer userId) {
         userStorage.findById(userId);
         filmStorage.findById(filmId);
-        if (likeStorage != null) {
-            likeStorage.addLike(filmId, userId);
-            log.info("Пользователь {} поставил лайк фильму {}", userId, filmId);
-            return;
-        }
-        Film film = filmStorage.findById(filmId);
-        if (film.getLikes().add(userId)) {
-            log.info("Пользователь {} поставил лайк фильму {}", userId, filmId);
-        }
-        filmStorage.update(film);
+        likeStorage.addLike(filmId, userId);
+        log.info("Пользователь {} поставил лайк фильму {}", userId, filmId);
     }
 
     public void deleteLike(Integer filmId, Integer userId) {
         userStorage.findById(userId);
         filmStorage.findById(filmId);
-        if (likeStorage != null) {
-            likeStorage.deleteLike(filmId, userId);
-            log.info("Пользователь {} удалил лайк фильму {}", userId, filmId);
-            return;
-        }
-        Film film = filmStorage.findById(filmId);
-        if (film.getLikes().remove(userId)) {
-            log.info("Пользователь {} удалил лайк фильму {}", userId, filmId);
-        }
-        filmStorage.update(film);
+        likeStorage.deleteLike(filmId, userId);
+        log.info("Пользователь {} удалил лайк фильму {}", userId, filmId);
     }
 
     public List<Film> getTopPopular(int count) {
         if (count < 1) {
             throw new ConditionNotMetException("Количество фильмов в топе должно быть положительным");
         }
-        return findAll().stream()
-                .sorted((f1, f2) -> Integer.compare(f2.getLikes().size(), f1.getLikes().size()))
-                .limit(count)
-                .collect(Collectors.toList());
+        Collection<Film> films = filmStorage.findTopPopular(count);
+        if (films.isEmpty()) {
+            return List.of();
+        }
+        List<Integer> filmIds = films.stream()
+                .map(Film::getId)
+                .toList();
+        Map<Integer, Set<Genre>> genresByFilmId = filmGenreStorage.getGenresByFilmIds(filmIds);
+        Map<Integer, Set<Integer>> likesByFilmId = likeStorage.getLikesByFilmIds(filmIds);
+        for (Film film : films) {
+            Integer filmId = film.getId();
+            film.setGenres(genresByFilmId.getOrDefault(filmId, new HashSet<>()));
+            film.setLikes(likesByFilmId.getOrDefault(filmId, new HashSet<>()));
+        }
+        return films.stream().collect(Collectors.toList());
     }
 
     private void fillRelations(Film film) {
-        if (filmGenreStorage != null) {
-            film.setGenres(filmGenreStorage.getGenres(film.getId()));
-        }
-        if (likeStorage != null) {
-            film.setLikes(likeStorage.getLikes(film.getId()));
-        }
+        film.setGenres(filmGenreStorage.getGenres(film.getId()));
+        film.setLikes(likeStorage.getLikes(film.getId()));
     }
 
     private void validateGenres(Film film) {
         if (film.getGenres() == null || film.getGenres().isEmpty()) {
             return;
         }
-        film.getGenres().forEach(genre -> {
-            if (genre != null && genre.getId() != null) {
-                genreStorage.findById(genre.getId());
-            }
-        });
+        Set<Integer> ids = film.getGenres().stream()
+                .map(Genre::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        genreStorage.validateIds(ids);
     }
 }

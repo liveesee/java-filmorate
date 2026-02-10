@@ -8,4 +8,6 @@ public interface FriendStorage {
     void deleteFriend(Integer userId, Integer friendId);
 
     Set<Integer> getFriends(Integer userId);
+
+    Set<Integer> getCommonFriendIds(Integer userId, Integer otherId);
 }

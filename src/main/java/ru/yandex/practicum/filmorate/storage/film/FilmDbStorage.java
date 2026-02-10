@@ -40,6 +40,21 @@ public class FilmDbStorage implements FilmStorage {
     }
 
     @Override
+    public Collection<Film> findTopPopular(int count) {
+        String sql = """
+                SELECT f.id, f.name, f.description, f.releaseDate, f.duration,
+                       f.mpa_id, m.name AS mpa_name
+                FROM films AS f
+                JOIN mpa AS m ON f.mpa_id = m.id
+                LEFT JOIN likes AS l ON f.id = l.film_id
+                GROUP BY f.id, f.name, f.description, f.releaseDate, f.duration, f.mpa_id, m.name
+                ORDER BY COUNT(l.user_id) DESC, f.id
+                LIMIT ?
+                """;
+        return jdbcTemplate.query(sql, filmRowMapper, count);
+    }
+
+    @Override
     public Film create(Film film) {
         String sql = "INSERT INTO films (name, description, releaseDate, duration, mpa_id) VALUES (?, ?, ?, ?, ?)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -60,8 +75,7 @@ public class FilmDbStorage implements FilmStorage {
     @Override
     public Film update(Film film) {
         String sql = "UPDATE films SET name = ?, description = ?, releaseDate = ?, duration = ?, mpa_id = ? WHERE id = ?";
-        findById(film.getId());
-        jdbcTemplate.update(sql,
+        int updated = jdbcTemplate.update(sql,
                 film.getName(),
                 film.getDescription(),
                 film.getReleaseDate(),
@@ -69,7 +83,10 @@ public class FilmDbStorage implements FilmStorage {
                 film.getMpa() == null ? null : film.getMpa().getId(),
                 film.getId()
         );
-
+        if (updated == 0) {
+            log.warn("Ошибка при обновлении фильма: фильм с ID {} не найден", film.getId());
+            throw new NotFoundException("Фильм с ID - " + film.getId() + " не найден");
+        }
         return film;
     }
 

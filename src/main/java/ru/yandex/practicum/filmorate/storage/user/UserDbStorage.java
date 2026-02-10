@@ -15,6 +15,8 @@ import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -54,14 +56,17 @@ public class UserDbStorage implements UserStorage {
     @Override
     public User update(User user) {
         String sql = "UPDATE users SET email = ?, login = ?, name = ?, birthday = ? WHERE id = ?";
-        findById(user.getId());
-        jdbcTemplate.update(sql,
+        int updated = jdbcTemplate.update(sql,
                 user.getEmail(),
                 user.getLogin(),
                 user.getName(),
                 user.getBirthday(),
                 user.getId()
         );
+        if (updated == 0) {
+            log.warn("Ошибка при обновлении пользователя: пользователь с ID {} не найден", user.getId());
+            throw new NotFoundException("Пользователь с ID - " + user.getId() + " не найден");
+        }
         return user;
     }
 
@@ -74,6 +79,16 @@ public class UserDbStorage implements UserStorage {
             throw new NotFoundException("Пользователь с ID - " + id + " не найден");
         }
         return users.get(0);
+    }
+
+    @Override
+    public Collection<User> findByIds(Set<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = ids.stream().map(id -> "?").collect(Collectors.joining(", "));
+        String sql = "SELECT id, email, login, name, birthday FROM users WHERE id IN (%s)".formatted(placeholders);
+        return jdbcTemplate.query(sql, userRowMapper, ids.toArray());
     }
 
 }

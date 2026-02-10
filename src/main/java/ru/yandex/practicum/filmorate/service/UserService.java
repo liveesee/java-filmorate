@@ -10,7 +10,6 @@ import ru.yandex.practicum.filmorate.storage.user.UserStorage;
 
 import java.time.LocalDate;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -24,9 +23,7 @@ public class UserService {
 
     public Collection<User> findAll() {
         Collection<User> users = userStorage.findAll();
-        if (friendStorage != null) {
-            users.forEach(this::fillFriends);
-        }
+        users.forEach(this::fillFriends);
         return users;
     }
 
@@ -85,9 +82,7 @@ public class UserService {
 
     public User findById(Integer id) {
         User user = userStorage.findById(id);
-        if (friendStorage != null) {
-            fillFriends(user);
-        }
+        fillFriends(user);
         return user;
     }
 
@@ -107,18 +102,20 @@ public class UserService {
     }
 
     public Collection<User> getCommonFriends(Integer userId, Integer otherId) {
-        User user = findById(userId);
-        User other = findById(otherId);
-        Set<Integer> commonIds = new HashSet<>(user.getFriends());
-        commonIds.retainAll(other.getFriends());
-        return commonIds.stream()
-                .map(this::findById)
+        userStorage.findById(userId);
+        userStorage.findById(otherId);
+        Set<Integer> commonIds = friendStorage.getCommonFriendIds(userId, otherId);
+        return userStorage.findByIds(commonIds).stream()
+                .peek(this::fillFriends)
                 .collect(Collectors.toList());
     }
 
     public Collection<User> findAllFriends(Integer userId) {
-        User user = findById(userId);
-        return user.getFriends().stream().map(this::findById).toList();
+        userStorage.findById(userId);
+        Set<Integer> friendIds = friendStorage.getFriends(userId);
+        return userStorage.findByIds(friendIds).stream()
+                .peek(this::fillFriends)
+                .toList();
     }
 
     private void fillFriends(User user) {
