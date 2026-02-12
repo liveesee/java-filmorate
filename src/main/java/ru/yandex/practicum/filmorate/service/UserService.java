@@ -10,6 +10,8 @@ import ru.yandex.practicum.filmorate.storage.user.UserStorage;
 
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -23,7 +25,14 @@ public class UserService {
 
     public Collection<User> findAll() {
         Collection<User> users = userStorage.findAll();
-        users.forEach(this::fillFriends);
+        if (users.isEmpty()) {
+            return users;
+        }
+        Set<Integer> userIds = users.stream()
+                .map(User::getId)
+                .collect(Collectors.toSet());
+        Map<Integer, Set<Integer>> friendsByUserId = friendStorage.getFriendsByUserIds(userIds);
+        users.forEach(user -> user.setFriends(friendsByUserId.getOrDefault(user.getId(), new HashSet<>())));
         return users;
     }
 
@@ -105,17 +114,13 @@ public class UserService {
         userStorage.findById(userId);
         userStorage.findById(otherId);
         Set<Integer> commonIds = friendStorage.getCommonFriendIds(userId, otherId);
-        return userStorage.findByIds(commonIds).stream()
-                .peek(this::fillFriends)
-                .collect(Collectors.toList());
+        return userStorage.findByIds(commonIds);
     }
 
     public Collection<User> findAllFriends(Integer userId) {
         userStorage.findById(userId);
         Set<Integer> friendIds = friendStorage.getFriends(userId);
-        return userStorage.findByIds(friendIds).stream()
-                .peek(this::fillFriends)
-                .toList();
+        return userStorage.findByIds(friendIds);
     }
 
     private void fillFriends(User user) {
