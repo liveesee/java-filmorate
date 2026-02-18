@@ -1,27 +1,39 @@
 package ru.yandex.practicum.filmorate.service;
 
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionNotMetException;
 import ru.yandex.practicum.filmorate.model.User;
-import ru.yandex.practicum.filmorate.storage.UserStorage;
+import ru.yandex.practicum.filmorate.storage.friend.FriendStorage;
+import ru.yandex.practicum.filmorate.storage.user.UserStorage;
 
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
+@AllArgsConstructor
 public class UserService {
 
     private final UserStorage userStorage;
+    private final FriendStorage friendStorage;
 
     public Collection<User> findAll() {
-        return userStorage.findAll();
+        Collection<User> users = userStorage.findAll();
+        if (users.isEmpty()) {
+            return users;
+        }
+        Set<Integer> userIds = users.stream()
+                .map(User::getId)
+                .collect(Collectors.toSet());
+        Map<Integer, Set<Integer>> friendsByUserId = friendStorage.getFriendsByUserIds(userIds);
+        users.forEach(user -> user.setFriends(friendsByUserId.getOrDefault(user.getId(), new HashSet<>())));
+        return users;
     }
 
     public User create(User user) {
@@ -78,38 +90,40 @@ public class UserService {
     }
 
     public User findById(Integer id) {
-        return userStorage.findById(id);
+        User user = userStorage.findById(id);
+        fillFriends(user);
+        return user;
     }
 
     public void addFriend(Integer userId, Integer friendId) {
         if (userId.equals(friendId)) {
             throw new IllegalArgumentException("Нельзя добавить самого себя в друзья");
         }
-        User user = userStorage.findById(userId);
-        User friend = userStorage.findById(friendId);
-        user.getFriends().add(friendId);
-        friend.getFriends().add(userId);
+        userStorage.findById(userId);
+        userStorage.findById(friendId);
+        friendStorage.addFriend(userId, friendId);
     }
 
     public void deleteFriend(Integer userId, Integer friendId) {
-        User user = userStorage.findById(userId);
-        User friend = userStorage.findById(friendId);
-        user.getFriends().remove(friendId);
-        friend.getFriends().remove(userId);
+        userStorage.findById(userId);
+        userStorage.findById(friendId);
+        friendStorage.deleteFriend(userId, friendId);
     }
 
     public Collection<User> getCommonFriends(Integer userId, Integer otherId) {
-        User user = userStorage.findById(userId);
-        User other = userStorage.findById(otherId);
-        Set<Integer> commonIds = new HashSet<>(user.getFriends());
-        commonIds.retainAll(other.getFriends());
-        return commonIds.stream()
-                .map(userStorage::findById)
-                .collect(Collectors.toList());
+        userStorage.findById(userId);
+        userStorage.findById(otherId);
+        Set<Integer> commonIds = friendStorage.getCommonFriendIds(userId, otherId);
+        return userStorage.findByIds(commonIds);
     }
 
     public Collection<User> findAllFriends(Integer userId) {
-        User user = userStorage.findById(userId);
-        return user.getFriends().stream().map(userStorage::findById).toList();
+        userStorage.findById(userId);
+        Set<Integer> friendIds = friendStorage.getFriends(userId);
+        return userStorage.findByIds(friendIds);
+    }
+
+    private void fillFriends(User user) {
+        user.setFriends(friendStorage.getFriends(user.getId()));
     }
 }

@@ -1,30 +1,71 @@
 package ru.yandex.practicum.filmorate.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionNotMetException;
 import ru.yandex.practicum.filmorate.model.Film;
-import ru.yandex.practicum.filmorate.storage.FilmStorage;
-import ru.yandex.practicum.filmorate.storage.UserStorage;
+import ru.yandex.practicum.filmorate.model.Genre;
+import ru.yandex.practicum.filmorate.storage.filmgenre.FilmGenreStorage;
+import ru.yandex.practicum.filmorate.storage.film.FilmStorage;
+import ru.yandex.practicum.filmorate.storage.genre.GenreStorage;
+import ru.yandex.practicum.filmorate.storage.like.LikeStorage;
+import ru.yandex.practicum.filmorate.storage.mpa.MpaStorage;
+import ru.yandex.practicum.filmorate.storage.user.UserStorage;
 
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class FilmService {
 
     private final FilmStorage filmStorage;
     private final UserStorage userStorage;
+    private final LikeStorage likeStorage;
+    private final FilmGenreStorage filmGenreStorage;
+    private final MpaStorage mpaStorage;
+    private final GenreStorage genreStorage;
     private static final int MAX_DESCRIPTION_LENGTH = 200;
     private static final LocalDate FIRST_FILM_RELEASE_DATE = LocalDate.of(1895, 12, 28);
 
+    @Autowired
+    public FilmService(@Qualifier("filmDbStorage") FilmStorage filmStorage,
+                       @Qualifier("userDbStorage") UserStorage userStorage,
+                       @Qualifier("likeDbStorage") LikeStorage likeStorage,
+                       @Qualifier("filmGenreDbStorage") FilmGenreStorage filmGenreStorage,
+                       @Qualifier("mpaDbStorage") MpaStorage mpaStorage,
+                       @Qualifier("genreDbStorage") GenreStorage genreStorage) {
+        this.filmStorage = filmStorage;
+        this.userStorage = userStorage;
+        this.likeStorage = likeStorage;
+        this.filmGenreStorage = filmGenreStorage;
+        this.mpaStorage = mpaStorage;
+        this.genreStorage = genreStorage;
+    }
+
     public Collection<Film> findAll() {
-        return filmStorage.findAll();
+        Collection<Film> films = filmStorage.findAll();
+        if (films.isEmpty()) {
+            return films;
+        }
+        List<Integer> filmIds = films.stream()
+                .map(Film::getId)
+                .toList();
+        Map<Integer, Set<Genre>> genresByFilmId = filmGenreStorage.getGenresByFilmIds(filmIds);
+        Map<Integer, Set<Integer>> likesByFilmId = likeStorage.getLikesByFilmIds(filmIds);
+        for (Film film : films) {
+            Integer filmId = film.getId();
+            film.setGenres(genresByFilmId.getOrDefault(filmId, new HashSet<>()));
+            film.setLikes(likesByFilmId.getOrDefault(filmId, new HashSet<>()));
+        }
+        return films;
     }
 
     public Film create(Film film) {
@@ -48,12 +89,20 @@ public class FilmService {
             log.warn("Валидация не пройдена при создании фильма: продолжительность должна быть указана");
             throw new ConditionNotMetException("Продолжительность должна быть указана");
         }
+        if (film.getMpa() == null || film.getMpa().getId() == null) {
+            log.warn("Валидация не пройдена при создании фильма: рейтинг должен быть указан");
+            throw new ConditionNotMetException("Рейтинг должен быть указан");
+        }
+        mpaStorage.findById(film.getMpa().getId());
         if (film.getDuration() < 0) {
             log.warn("Валидация не пройдена при создании фильма: продолжительность должна быть положительным числом");
             throw new ConditionNotMetException("Продолжительность должна быть положительным числом");
         }
+        validateGenres(film);
         log.info("Фильм успешно создан: ID={}, name={}", film.getId(), film.getName());
-        return filmStorage.create(film);
+        Film created = filmStorage.create(film);
+        filmGenreStorage.setGenres(created.getId(), created.getGenres());
+        return created;
     }
 
     public Film update(Film newFilm) {
@@ -61,6 +110,11 @@ public class FilmService {
             log.warn("Валидация не пройдена при обновлении фильма: ID должен быть указан");
             throw new ConditionNotMetException("ID должен быть указан");
         }
+        if (newFilm.getMpa() == null || newFilm.getMpa().getId() == null) {
+            log.warn("Валидация не пройдена при обновлении фильма: рейтинг должен быть указан");
+            throw new ConditionNotMetException("Рейтинг должен быть указан");
+        }
+        mpaStorage.findById(newFilm.getMpa().getId());
         if (newFilm.getName() != null) {
             if (newFilm.getName().isBlank()) {
                 log.warn("Валидация не пройдена при обновлении фильма: название должно быть указано");
@@ -85,38 +139,70 @@ public class FilmService {
                 throw new ConditionNotMetException("Продолжительность должна быть положительным числом");
             }
         }
+        validateGenres(newFilm);
         Film updatedFilm = filmStorage.update(newFilm);
+        filmGenreStorage.setGenres(updatedFilm.getId(), updatedFilm.getGenres());
         log.info("Фильм успешно обновлен: ID={}, name={}", updatedFilm.getId(), updatedFilm.getName());
         return updatedFilm;
     }
 
     public Film findById(Integer id) {
-        return filmStorage.findById(id);
+        Film film = filmStorage.findById(id);
+        fillRelations(film);
+        return film;
     }
 
     public void addLike(Integer filmId, Integer userId) {
         userStorage.findById(userId);
-        Film film = filmStorage.findById(filmId);
-        if (film.getLikes().add(userId)) {
-            log.info("Пользователь {} поставил лайк фильму {}", userId, filmId);
-        }
+        filmStorage.findById(filmId);
+        likeStorage.addLike(filmId, userId);
+        log.info("Пользователь {} поставил лайк фильму {}", userId, filmId);
     }
 
     public void deleteLike(Integer filmId, Integer userId) {
         userStorage.findById(userId);
-        Film film = filmStorage.findById(filmId);
-        if (film.getLikes().remove(userId)) {
-            log.info("Пользователь {} удалил лайк фильму {}", userId, filmId);
-        }
+        filmStorage.findById(filmId);
+        likeStorage.deleteLike(filmId, userId);
+        log.info("Пользователь {} удалил лайк фильму {}", userId, filmId);
     }
 
     public List<Film> getTopPopular(int count) {
         if (count < 1) {
             throw new ConditionNotMetException("Количество фильмов в топе должно быть положительным");
         }
-        return filmStorage.findAll().stream()
-                .sorted((f1, f2) -> Integer.compare(f2.getLikes().size(), f1.getLikes().size()))
-                .limit(count)
-                .collect(Collectors.toList());
+        Collection<Film> films = filmStorage.findTopPopular(count);
+        if (films.isEmpty()) {
+            return List.of();
+        }
+        List<Integer> filmIds = films.stream()
+                .map(Film::getId)
+                .toList();
+        Map<Integer, Set<Genre>> genresByFilmId = filmGenreStorage.getGenresByFilmIds(filmIds);
+        Map<Integer, Set<Integer>> likesByFilmId = likeStorage.getLikesByFilmIds(filmIds);
+        for (Film film : films) {
+            Integer filmId = film.getId();
+            film.setGenres(genresByFilmId.getOrDefault(filmId, new HashSet<>()));
+            film.setLikes(likesByFilmId.getOrDefault(filmId, new HashSet<>()));
+        }
+        return films.stream().collect(Collectors.toList());
+    }
+
+    private void fillRelations(Film film) {
+        film.setGenres(filmGenreStorage.getGenres(film.getId()));
+        film.setLikes(likeStorage.getLikes(film.getId()));
+    }
+
+    private void validateGenres(Film film) {
+        if (film.getGenres() == null || film.getGenres().isEmpty()) {
+            return;
+        }
+        Set<Integer> ids = film.getGenres().stream()
+                .map(Genre::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        genreStorage.validateIds(ids);
     }
 }
